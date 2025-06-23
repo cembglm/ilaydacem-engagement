@@ -28,6 +28,19 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Serve static files from dist directory (production)
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(process.cwd(), '../dist')));
+  
+  // Handle React routing
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/upload')) {
+      return next();
+    }
+    res.sendFile(path.join(process.cwd(), '../dist/index.html'));
+  });
+}
+
 // Configure multer for file uploads (geçici olarak)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

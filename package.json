@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "backend": "cd backend && npm run dev",
-    "backend:start": "cd backend && npm start"
+    "backend:start": "cd backend && npm start",
+    "railway:build": "npm install && npm run build && cd backend && npm install",
+    "railway:start": "cd backend && npm start"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
