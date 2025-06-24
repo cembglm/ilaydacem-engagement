@@ -3,7 +3,6 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npm run build && cd backend && npm start",
     "healthcheckPath": "/health",
     "restartPolicyType": "ON_FAILURE"
   }
