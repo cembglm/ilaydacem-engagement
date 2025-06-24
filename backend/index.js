@@ -23,10 +23,25 @@ const s3 = new AWS.S3({
 
 // Middleware
 app.use(cors({
-  origin: [process.env.FRONTEND_URL || 'http://localhost:5173', 'http://localhost:5174'],
+  origin: [
+    process.env.FRONTEND_URL || 'http://localhost:5173', 
+    'http://localhost:5174',
+    'https://ilaydacem.com',
+    'https://www.ilaydacem.com',
+    'http://ilaydacem.com',
+    'http://www.ilaydacem.com'
+  ],
   credentials: true
 }));
 app.use(express.json());
+
+// www'dan www olmadan yönlendirme
+app.use((req, res, next) => {
+  if (req.headers.host === 'www.ilaydacem.com') {
+    return res.redirect(301, `https://ilaydacem.com${req.url}`);
+  }
+  next();
+});
 
 // Serve static files from dist directory (production)
 if (process.env.NODE_ENV === 'production') {
