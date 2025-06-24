@@ -11,7 +11,7 @@
     "backend": "cd backend && npm run dev",
     "backend:start": "cd backend && npm start",
     "railway:build": "npm install && npm run build && cd backend && npm install",
-    "railway:start": "cd backend && npm start"
+    "railway:start": "cd backend && NODE_ENV=production npm start"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

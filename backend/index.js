@@ -30,15 +30,9 @@ app.use(express.json());
 
 // Serve static files from dist directory (production)
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(process.cwd(), '../dist')));
-  
-  // Handle React routing
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/upload')) {
-      return next();
-    }
-    res.sendFile(path.join(process.cwd(), '../dist/index.html'));
-  });
+  const distPath = path.join(process.cwd(), 'dist');
+  console.log(`📁 Static files path: ${distPath}`);
+  app.use(express.static(distPath));
 }
 
 // Configure multer for file uploads (geçici olarak)
@@ -539,7 +533,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.listen(port, async () => {
+app.listen(port, '0.0.0.0', async () => {
   console.log(`🚀 Server ${port} portunda çalışıyor`);
   console.log(`📁 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5174'}`);
   console.log(`🗄️  Backblaze Bucket: ${process.env.BACKBLAZE_BUCKET_NAME || 'Yapılandırılmamış'}`);
@@ -547,5 +541,10 @@ app.listen(port, async () => {
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   
   // Backblaze bağlantısını test et
-  await testBackblazeConnection();
+  try {
+    await testBackblazeConnection();
+    console.log('✅ Backblaze B2 bağlantısı başarılı');
+  } catch (error) {
+    console.error('❌ Backblaze B2 bağlantı hatası:', error.message);
+  }
 });
