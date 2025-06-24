@@ -30,9 +30,17 @@ app.use(express.json());
 
 // Serve static files from dist directory (production)
 if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(process.cwd(), 'dist');
+  const distPath = path.join(process.cwd(), '..', 'dist');
   console.log(`📁 Static files path: ${distPath}`);
-  app.use(express.static(distPath));
+  console.log(`📁 Current working directory: ${process.cwd()}`);
+  
+  // Check if dist directory exists
+  if (fs.existsSync(distPath)) {
+    console.log(`✅ Dist directory found at: ${distPath}`);
+    app.use(express.static(distPath));
+  } else {
+    console.log(`❌ Dist directory not found at: ${distPath}`);
+  }
 }
 
 // Configure multer for file uploads (geçici olarak)
@@ -514,8 +522,8 @@ app.use((error, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use((req, res) => {
+// 404 handler for API routes only
+app.use('/api/*', (req, res) => {
   res.status(404).json({ 
     error: 'Endpoint bulunamadı',
     path: req.path,
@@ -523,13 +531,18 @@ app.use((req, res) => {
   });
 });
 
-// Production'da frontend dosyalarını serve et
+// Production'da React Router için catch-all handler (en sonda olmalı)
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(path.dirname(new URL(import.meta.url).pathname), '../dist')));
-  
-  // React Router için catch-all handler
   app.get('*', (req, res) => {
-    res.sendFile(path.join(path.dirname(new URL(import.meta.url).pathname), '../dist/index.html'));
+    const indexPath = path.join(process.cwd(), '..', 'dist', 'index.html');
+    console.log(`📄 Serving index.html from: ${indexPath}`);
+    
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      console.log(`❌ index.html not found at: ${indexPath}`);
+      res.status(404).send('Frontend files not found');
+    }
   });
 }
 
