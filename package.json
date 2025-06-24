@@ -5,15 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "postbuild": "cd backend && npm install",
+    "build": "vite build && cd backend && npm install",
+    "postbuild": "echo 'Build completed'",
     "start": "cd backend && npm start",
     "lint": "eslint .",
     "preview": "vite preview",
     "backend": "cd backend && npm run dev",
-    "backend:start": "cd backend && npm start",
-    "railway:build": "npm install && npm run build && cd backend && npm install",
-    "railway:start": "cd backend && NODE_ENV=production npm start"
+    "backend:start": "cd backend && npm start"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

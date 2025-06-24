@@ -1,8 +1,6 @@
 {
-  "build": {
-    "builder": "NIXPACKS"
-  },
   "deploy": {
+    "startCommand": "npm run start",
     "healthcheckPath": "/health",
     "restartPolicyType": "ON_FAILURE"
   }
