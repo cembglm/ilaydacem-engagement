@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Upload, Heart, Camera, X, Play, Image, Video, User } from 'lucide-react';
+import { Upload, Heart, Camera, X, Play, Image, Video, User, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 interface UploadedFile {
   id: string;
@@ -8,6 +8,8 @@ interface UploadedFile {
   type: 'image' | 'video';
   uploaderName: string;
   uploaderWish: string;
+  uploadProgress?: number;
+  uploadStatus?: 'pending' | 'uploading' | 'completed' | 'error';
 }
 
 function App() {
@@ -15,6 +17,8 @@ function App() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploaderName, setUploaderName] = useState('');
   const [uploaderWish, setUploaderWish] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Ana gönderim fonksiyonu
@@ -28,6 +32,9 @@ function App() {
       alert('Lütfen en az bir fotoğraf/video yükleyin veya iyi dileklerinizi yazın');
       return;
     }
+
+    setIsUploading(true);
+    setUploadProgress(0);
 
     try {
       // Upload işlemi
@@ -53,6 +60,9 @@ function App() {
     } catch (error) {
       console.error('Upload failed:', error);
       alert('❌ Gönderim başarısız oldu. Lütfen tekrar deneyin.');
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -67,16 +77,24 @@ function App() {
       preview,
       type,
       uploaderName: uploaderName.trim() || 'Anonim',
-      uploaderWish: uploaderWish.trim()
+      uploaderWish: uploaderWish.trim(),
+      uploadProgress: 0,
+      uploadStatus: 'pending'
     };
   }, [uploaderName, uploaderWish]);
 
   const uploadToBackend = async (fileObjects: UploadedFile[], uploaderNameParam?: string, uploaderWishParam?: string) => {
     const formData = new FormData();
     
-    // Add files to FormData
-    fileObjects.forEach(fileObj => {
+    // Add files to FormData and set initial upload status
+    fileObjects.forEach((fileObj) => {
       formData.append('files', fileObj.file);
+      // Update file status to uploading
+      setFiles(prev => prev.map(f => 
+        f.id === fileObj.id 
+          ? { ...f, uploadStatus: 'uploading' as const, uploadProgress: 0 }
+          : f
+      ));
     });
     
     // Add uploader info - use parameters if provided, otherwise use state
@@ -98,10 +116,46 @@ function App() {
         body: formData,
       });
 
+      // Simulate progress for better user experience
+      if (fileObjects.length > 0) {
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => {
+            const newProgress = prev + (100 / (fileObjects.length * 10));
+            if (newProgress >= 90) {
+              clearInterval(progressInterval);
+              return 90;
+            }
+            return newProgress;
+          });
+          
+          // Update individual file progress
+          setFiles(prev => prev.map(f => {
+            const fileObj = fileObjects.find(fo => fo.id === f.id);
+            if (fileObj && f.uploadStatus === 'uploading') {
+              const fileProgress = Math.min(100, (f.uploadProgress || 0) + Math.random() * 15);
+              return { ...f, uploadProgress: fileProgress };
+            }
+            return f;
+          }));
+        }, 200);
+
+        // Clear interval when response is received
+        setTimeout(() => clearInterval(progressInterval), 1000);
+      }
+
       console.log('Response status:', response.status);
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
+        // Mark all files as error
+        fileObjects.forEach(fileObj => {
+          setFiles(prev => prev.map(f => 
+            f.id === fileObj.id 
+              ? { ...f, uploadStatus: 'error' as const, uploadProgress: 0 }
+              : f
+          ));
+        });
+        
         const errorText = await response.text();
         console.error('Response error text:', errorText);
         throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${errorText}`);
@@ -110,8 +164,29 @@ function App() {
       const result = await response.json();
       console.log('Upload result:', result);
 
+      // Mark all files as completed
+      fileObjects.forEach(fileObj => {
+        setFiles(prev => prev.map(f => 
+          f.id === fileObj.id 
+            ? { ...f, uploadStatus: 'completed' as const, uploadProgress: 100 }
+            : f
+        ));
+      });
+
+      // Complete overall progress
+      setUploadProgress(100);
+
       return result;
     } catch (error) {
+      // Mark all files as error
+      fileObjects.forEach(fileObj => {
+        setFiles(prev => prev.map(f => 
+          f.id === fileObj.id 
+            ? { ...f, uploadStatus: 'error' as const, uploadProgress: 0 }
+            : f
+        ));
+      });
+      
       console.error('Upload error:', error);
       throw error;
     }
@@ -145,6 +220,10 @@ function App() {
     setFiles(prev => {
       const fileToRemove = prev.find(f => f.id === id);
       if (fileToRemove) {
+        // Don't remove if currently uploading
+        if (fileToRemove.uploadStatus === 'uploading') {
+          return prev;
+        }
         URL.revokeObjectURL(fileToRemove.preview);
       }
       return prev.filter(f => f.id !== id);
@@ -287,7 +366,7 @@ function App() {
                       Dosya Seç
                     </button>
                     <p className="text-xs text-gray-500 mt-3">
-                      JPG, PNG, MP4, MOV formatları desteklenir (Maks. 100MB)
+                      JPG, PNG, MP4, MOV formatları desteklenir (Maks. 10GB)
                     </p>
                   </div>
                 </div>
@@ -346,10 +425,44 @@ function App() {
                             </div>
                           </div>
 
+                          {/* Upload Status Overlay */}
+                          {file.uploadStatus && file.uploadStatus !== 'pending' && (
+                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                              <div className="text-center text-white">
+                                {file.uploadStatus === 'uploading' && (
+                                  <>
+                                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                                    <div className="text-sm font-medium mb-2">Yükleniyor...</div>
+                                    <div className="w-16 bg-white/20 rounded-full h-1 mx-auto">
+                                      <div 
+                                        className="bg-white h-1 rounded-full transition-all duration-300"
+                                        style={{ width: `${file.uploadProgress || 0}%` }}
+                                      ></div>
+                                    </div>
+                                    <div className="text-xs mt-1">{Math.round(file.uploadProgress || 0)}%</div>
+                                  </>
+                                )}
+                                {file.uploadStatus === 'completed' && (
+                                  <>
+                                    <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-400" />
+                                    <div className="text-sm font-medium">Tamamlandı</div>
+                                  </>
+                                )}
+                                {file.uploadStatus === 'error' && (
+                                  <>
+                                    <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-400" />
+                                    <div className="text-sm font-medium">Hata</div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Remove Button */}
                           <button
                             onClick={() => removeFile(file.id)}
-                            className="absolute top-3 right-3 rounded-full bg-red-500 p-1.5 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-600 hover:scale-110"
+                            disabled={file.uploadStatus === 'uploading'}
+                            className="absolute top-3 right-3 rounded-full bg-red-500 p-1.5 text-white opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-600 hover:scale-110 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -360,12 +473,54 @@ function App() {
                           <h3 className="font-medium text-gray-800 truncate mb-1">
                             {file.file.name}
                           </h3>
-                          <p className="text-sm text-gray-500">
-                            {(file.file.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm text-gray-500">
+                              {(file.file.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                            {file.uploadStatus && (
+                              <div className="flex items-center gap-1">
+                                {file.uploadStatus === 'uploading' && (
+                                  <div className="flex items-center gap-1 text-blue-600">
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    <span className="text-xs">Yükleniyor</span>
+                                  </div>
+                                )}
+                                {file.uploadStatus === 'completed' && (
+                                  <div className="flex items-center gap-1 text-green-600">
+                                    <CheckCircle className="h-3 w-3" />
+                                    <span className="text-xs">Tamamlandı</span>
+                                  </div>
+                                )}
+                                {file.uploadStatus === 'error' && (
+                                  <div className="flex items-center gap-1 text-red-600">
+                                    <AlertCircle className="h-3 w-3" />
+                                    <span className="text-xs">Hata</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Overall Upload Progress */}
+              {isUploading && (
+                <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                    <span className="text-sm font-medium text-blue-700">
+                      Dosyalar yükleniyor... {Math.round(uploadProgress)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-blue-100 rounded-full h-2">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
                   </div>
                 </div>
               )}
@@ -374,20 +529,32 @@ function App() {
               <div className="pt-6">
                 <button
                   onClick={handleSubmit}
-                  disabled={!uploaderName.trim() || (files.length === 0 && !uploaderWish.trim())}
+                  disabled={!uploaderName.trim() || (files.length === 0 && !uploaderWish.trim()) || isUploading}
                   className="w-full px-8 py-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-semibold text-lg rounded-xl hover:from-rose-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-rose-200 shadow-lg"
                 >
                   <div className="flex items-center justify-center gap-3">
-                    <Heart className="h-6 w-6 fill-current" />
-                    <span>Gönder</span>
-                    <Heart className="h-6 w-6 fill-current" />
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span>Gönderiliyor...</span>
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      </>
+                    ) : (
+                      <>
+                        <Heart className="h-6 w-6 fill-current" />
+                        <span>Gönder</span>
+                        <Heart className="h-6 w-6 fill-current" />
+                      </>
+                    )}
                   </div>
                 </button>
-                {(!uploaderName.trim() || (files.length === 0 && !uploaderWish.trim())) && (
+                {(!uploaderName.trim() || (files.length === 0 && !uploaderWish.trim()) || isUploading) && (
                   <p className="text-xs text-gray-500 mt-2 text-center">
-                    {!uploaderName.trim() 
-                      ? 'Lütfen adınızı girin' 
-                      : 'Lütfen en az bir dosya yükleyin veya iyi dileklerinizi yazın'
+                    {isUploading
+                      ? 'Dosyalarınız yükleniyor, lütfen bekleyin...'
+                      : !uploaderName.trim() 
+                        ? 'Lütfen adınızı girin' 
+                        : 'Lütfen en az bir dosya yükleyin veya iyi dileklerinizi yazın'
                     }
                   </p>
                 )}
