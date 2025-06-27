@@ -193,9 +193,37 @@ function App() {
   };
 
   const handleFiles = useCallback(async (newFiles: File[]) => {
-    const validFiles = newFiles.filter(file => 
-      file.type.startsWith('image/') || file.type.startsWith('video/')
-    );
+    const allowedTypes = [
+      // Resim formatları
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'image/bmp', 'image/tiff', 'image/tif', 'image/svg+xml', 'image/heic', 'image/heif',
+      // Video formatları
+      'video/mp4', 'video/mov', 'video/avi', 'video/quicktime', 'video/wmv',
+      'video/flv', 'video/webm', 'video/mkv', 'video/m4v', 'video/3gp', 'video/3gpp',
+      'video/3gpp2', 'video/x-msvideo', 'video/x-ms-wmv', 'video/x-flv'
+    ];
+
+    const validFiles = newFiles.filter(file => {
+      // MIME type kontrolü
+      if (allowedTypes.includes(file.type)) {
+        return true;
+      }
+      
+      // Dosya uzantısı kontrolü (MIME type algılanmazsa)
+      const fileExtension = file.name.toLowerCase().split('.').pop();
+      const allowedExtensions = [
+        'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'svg', 'heic', 'heif',
+        'mp4', 'mov', 'avi', 'wmv', 'flv', 'webm', 'mkv', 'm4v', '3gp', '3gpp'
+      ];
+      
+      return allowedExtensions.includes(fileExtension || '');
+    });
+
+    // Geçersiz dosyalar hakkında kullanıcıyı bilgilendir
+    const invalidFiles = newFiles.length - validFiles.length;
+    if (invalidFiles > 0) {
+      alert(`${invalidFiles} dosya desteklenmeyen formatta olduğu için eklenmedi. Lütfen resim veya video dosyaları seçin.`);
+    }
 
     const fileObjects = validFiles.map(createFileObject);
     setFiles(prev => [...prev, ...fileObjects]);
@@ -366,7 +394,7 @@ function App() {
                       Dosya Seç
                     </button>
                     <p className="text-xs text-gray-500 mt-3">
-                      JPG, PNG, MP4, MOV formatları desteklenir (Maks. 10GB)
+                      Tüm resim ve video formatları desteklenir (JPG, PNG, MP4, MOV, HEIC vb.) - Maks. 10GB
                     </p>
                   </div>
                 </div>
@@ -375,7 +403,7 @@ function App() {
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/*,video/*"
+                  accept="image/*,video/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.tif,.svg,.heic,.heif,.mp4,.mov,.avi,.wmv,.flv,.webm,.mkv,.m4v,.3gp,.3gpp"
                   onChange={handleFileInput}
                   className="hidden"
                 />

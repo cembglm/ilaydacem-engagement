@@ -76,8 +76,14 @@ const upload = multer({
   },
   fileFilter: (req, file, cb) => {
     const allowedMimes = [
+      // Resim formatları - Desktop & Mobile
       'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-      'video/mp4', 'video/mov', 'video/avi', 'video/quicktime'
+      'image/bmp', 'image/tiff', 'image/tif', 'image/svg+xml', 'image/heic', 'image/heif',
+      
+      // Video formatları - Desktop & Mobile
+      'video/mp4', 'video/mov', 'video/avi', 'video/quicktime', 'video/wmv',
+      'video/flv', 'video/webm', 'video/mkv', 'video/m4v', 'video/3gp', 'video/3gpp',
+      'video/3gpp2', 'video/x-msvideo', 'video/x-ms-wmv', 'video/x-flv'
     ];
     
     if (allowedMimes.includes(file.mimetype)) {
