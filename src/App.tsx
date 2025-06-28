@@ -193,6 +193,8 @@ function App() {
   };
 
   const handleFiles = useCallback(async (newFiles: File[]) => {
+    console.log('📂 handleFiles called with:', newFiles.length, 'files');
+    
     const allowedTypes = [
       // Resim formatları
       'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
@@ -204,8 +206,11 @@ function App() {
     ];
 
     const validFiles = newFiles.filter(file => {
+      console.log('🔍 Checking file:', file.name, 'Type:', file.type);
+      
       // MIME type kontrolü
       if (allowedTypes.includes(file.type)) {
+        console.log('✅ File accepted by MIME type:', file.type);
         return true;
       }
       
@@ -216,8 +221,13 @@ function App() {
         'mp4', 'mov', 'avi', 'wmv', 'flv', 'webm', 'mkv', 'm4v', '3gp', '3gpp'
       ];
       
-      return allowedExtensions.includes(fileExtension || '');
+      const extensionValid = allowedExtensions.includes(fileExtension || '');
+      console.log('🔍 Extension check:', fileExtension, 'Valid:', extensionValid);
+      
+      return extensionValid;
     });
+
+    console.log('✅ Valid files:', validFiles.length, 'out of', newFiles.length);
 
     // Geçersiz dosyalar hakkında kullanıcıyı bilgilendir
     const invalidFiles = newFiles.length - validFiles.length;
@@ -226,7 +236,13 @@ function App() {
     }
 
     const fileObjects = validFiles.map(createFileObject);
-    setFiles(prev => [...prev, ...fileObjects]);
+    console.log('📦 Created file objects:', fileObjects.length);
+    
+    setFiles(prev => {
+      const newFileList = [...prev, ...fileObjects];
+      console.log('📝 Updated file list length:', newFileList.length);
+      return newFileList;
+    });
   }, [createFileObject]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -238,9 +254,18 @@ function App() {
   }, [handleFiles]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
+    console.log('📱 File input triggered:', e.target.files);
+    console.log('📱 Number of files:', e.target.files?.length);
+    
+    if (e.target.files && e.target.files.length > 0) {
       const selectedFiles = Array.from(e.target.files);
+      console.log('📱 Selected files:', selectedFiles.map(f => ({ name: f.name, type: f.type, size: f.size })));
       handleFiles(selectedFiles);
+      
+      // Input'u sıfırla ki aynı dosya tekrar seçilebilsin
+      e.target.value = '';
+    } else {
+      console.log('📱 No files selected or files is null');
     }
   }, [handleFiles]);
 
@@ -347,7 +372,7 @@ function App() {
                 
                 {/* Upload Area */}
                 <div
-                  className={`relative border-2 border-dashed rounded-2xl transition-all duration-300 ${
+                  className={`relative border-2 border-dashed rounded-2xl transition-all duration-300 cursor-pointer ${
                     isDragOver
                       ? 'border-rose-400 bg-rose-50'
                       : uploaderName.trim()
@@ -357,6 +382,24 @@ function App() {
                   onDrop={uploaderName.trim() ? handleDrop : undefined}
                   onDragOver={uploaderName.trim() ? handleDragOver : undefined}
                   onDragLeave={uploaderName.trim() ? handleDragLeave : undefined}
+                  onClick={() => {
+                    console.log('🖱️ Upload area clicked');
+                    console.log('🖱️ Uploader name:', uploaderName.trim());
+                    console.log('🖱️ File input ref:', fileInputRef.current);
+                    
+                    if (uploaderName.trim() && fileInputRef.current) {
+                      console.log('🖱️ Triggering file input click from upload area');
+                      fileInputRef.current.click();
+                    } else {
+                      console.log('❌ Cannot trigger file input - missing name or ref');
+                      if (!uploaderName.trim()) {
+                        alert('Lütfen önce adınızı girin');
+                      }
+                    }
+                  }}
+                  onTouchStart={() => {
+                    console.log('📱 Touch start on upload area');
+                  }}
                 >
                   <div className="p-8 text-center">
                     <div className="flex justify-center mb-4">
@@ -382,7 +425,7 @@ function App() {
                       }
                     </p>
                     <button
-                      onClick={() => uploaderName.trim() && fileInputRef.current?.click()}
+                      type="button"
                       disabled={!uploaderName.trim()}
                       className={`inline-flex items-center gap-2 px-6 py-3 font-medium rounded-xl transition-all duration-200 ${
                         uploaderName.trim()
@@ -403,9 +446,10 @@ function App() {
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/*,video/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.tif,.svg,.heic,.heif,.mp4,.mov,.avi,.wmv,.flv,.webm,.mkv,.m4v,.3gp,.3gpp"
+                  accept="image/*,video/*"
                   onChange={handleFileInput}
                   className="hidden"
+                  key={Date.now()} 
                 />
               </div>
 
