@@ -50,29 +50,15 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
-// Configure multer for file uploads (geçici olarak)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadsDir = './uploads';
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const timestamp = Date.now();
-    const originalName = file.originalname;
-    const extension = path.extname(originalName);
-    const nameWithoutExt = path.basename(originalName, extension);
-    const sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9ğĞıİöÖüÜşŞçÇ]/g, '_');
-    cb(null, `${timestamp}_${sanitizedName}${extension}`);
-  }
-});
+// Configure multer for file uploads (optimize için memory storage)
+const storage = multer.memoryStorage(); // Memory storage for better performance
 
 const upload = multer({ 
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 * 1024 // 10GB limit
+    fileSize: 10 * 1024 * 1024 * 1024, // 10GB limit
+    files: 20, // Max 20 files at once
+    fieldSize: 1024 * 1024 // 1MB field size
   },
   fileFilter: (req, file, cb) => {
     const allowedMimes = [
@@ -94,14 +80,13 @@ const upload = multer({
   }
 });
 
-// Helper function to upload file to Backblaze B2
-const uploadFileToBackblaze = async (filePath, fileName, uploaderName) => {
+// Helper function to upload file to Backblaze B2 (memory storage)
+const uploadFileToBackblaze = async (fileBuffer, fileName, uploaderName, mimeType) => {
   try {
-    const fileStream = fs.createReadStream(filePath);
     const fileExtension = path.extname(fileName).toLowerCase();
     
     // Content type belirleme
-    let contentType = 'application/octet-stream';
+    let contentType = mimeType || 'application/octet-stream';
     if (['.jpg', '.jpeg'].includes(fileExtension)) contentType = 'image/jpeg';
     else if (fileExtension === '.png') contentType = 'image/png';
     else if (fileExtension === '.gif') contentType = 'image/gif';
@@ -115,7 +100,7 @@ const uploadFileToBackblaze = async (filePath, fileName, uploaderName) => {
     const uploadParams = {
       Bucket: process.env.BACKBLAZE_BUCKET_NAME,
       Key: key,
-      Body: fileStream,
+      Body: fileBuffer, // Use buffer instead of file stream
       ContentType: contentType,
       ACL: 'public-read'
     };
@@ -128,7 +113,7 @@ const uploadFileToBackblaze = async (filePath, fileName, uploaderName) => {
       originalName: fileName,
       key: result.Key,
       bucket: result.Bucket,
-      size: fs.statSync(filePath).size,
+      size: fileBuffer.length,
       contentType: contentType,
       createdAt: new Date().toISOString()
     };
@@ -326,33 +311,59 @@ app.post('/upload', upload.array('files'), async (req, res) => {
 
     const uploadResults = [];
     const errors = [];
-      // Her dosyayı Backblaze'e yükle (eğer dosya varsa)
+      // Her dosyayı Backblaze'e yükle (eğer dosya varsa) - Concurrent uploads
     if (files && files.length > 0) {
-      for (const file of files) {
-        try {          const uploadResult = await uploadFileToBackblaze(
-            file.path, 
-            file.originalname, 
-            uploaderName.trim()
+      console.log(`📤 ${files.length} dosya paralel yükleme başlatılıyor...`);
+      
+      // Paralel upload için Promise.allSettled kullan
+      const uploadPromises = files.map(async (file) => {
+        try {
+          // Generate unique filename
+          const timestamp = Date.now();
+          const extension = path.extname(file.originalname);
+          const nameWithoutExt = path.basename(file.originalname, extension);
+          const sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9ğĞıİöÖüÜşŞçÇ]/g, '_');
+          const uniqueFileName = `${timestamp}_${sanitizedName}${extension}`;
+          
+          const uploadResult = await uploadFileToBackblaze(
+            file.buffer,  // Use buffer instead of file path
+            uniqueFileName, 
+            uploaderName.trim(),
+            file.mimetype
           );
           
-          uploadResults.push(uploadResult);
-
-          // Geçici dosyayı sil
-          fs.unlinkSync(file.path);
-          console.log(`✅ Dosya başarıyla yüklendi: ${file.originalname}`);
+          console.log(`✅ Dosya başarıyla yüklendi: ${file.originalname} -> ${uniqueFileName}`);
+          return { success: true, result: uploadResult };
         } catch (error) {
           console.error(`❌ Dosya yükleme hatası (${file.originalname}):`, error);
-          errors.push({
-            fileName: file.originalname,
-            error: error.message
-          });
-          
-          // Geçici dosyayı sil
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
+          return { 
+            success: false, 
+            error: {
+              fileName: file.originalname,
+              error: error.message
+            }
+          };
         }
-      }
+      });
+      
+      // Wait for all uploads to complete
+      const results = await Promise.allSettled(uploadPromises);
+      
+      // Process results
+      results.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          if (result.value.success) {
+            uploadResults.push(result.value.result);
+          } else {
+            errors.push(result.value.error);
+          }
+        } else {
+          errors.push({
+            fileName: 'Unknown',
+            error: result.reason?.message || 'Upload failed'
+          });
+        }
+      });
     }
 
     // Not dosyasını yükle (eğer varsa)

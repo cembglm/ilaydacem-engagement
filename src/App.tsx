@@ -83,19 +83,71 @@ function App() {
     };
   }, [uploaderName, uploaderWish]);
 
+  // Dosya sıkıştırma fonksiyonu (sadece resimler için)
+  const compressImage = useCallback((file: File, maxWidth = 1920, quality = 0.85): Promise<File> => {
+    return new Promise((resolve) => {
+      // Video dosyaları için sıkıştırma yapmayız
+      if (file.type.startsWith('video/')) {
+        resolve(file);
+        return;
+      }
+
+      // Resim dosyaları için sıkıştırma
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = document.createElement('img') as HTMLImageElement;
+      
+      img.onload = () => {
+        // Orijinal boyutları koru, sadece çok büyükse küçült
+        const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
+        const newWidth = ratio < 1 ? img.width * ratio : img.width;
+        const newHeight = ratio < 1 ? img.height * ratio : img.height;
+        
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+        
+        // Resmi canvas'a çiz
+        ctx?.drawImage(img, 0, 0, newWidth, newHeight);
+        
+        // Canvas'ı blob'a çevir
+        canvas.toBlob((blob) => {
+          if (blob) {
+            // Sıkıştırılmış dosya daha büyükse orijinali kullan
+            const compressedFile = blob.size < file.size 
+              ? new File([blob], file.name, { type: file.type })
+              : file;
+            resolve(compressedFile);
+          } else {
+            resolve(file);
+          }
+        }, file.type, quality);
+      };
+      
+      img.onerror = () => resolve(file);
+      img.src = URL.createObjectURL(file);
+    });
+  }, []);
+
   const uploadToBackend = async (fileObjects: UploadedFile[], uploaderNameParam?: string, uploaderWishParam?: string) => {
     const formData = new FormData();
     
-    // Add files to FormData and set initial upload status
-    fileObjects.forEach((fileObj) => {
-      formData.append('files', fileObj.file);
-      // Update file status to uploading
-      setFiles(prev => prev.map(f => 
-        f.id === fileObj.id 
-          ? { ...f, uploadStatus: 'uploading' as const, uploadProgress: 0 }
-          : f
-      ));
-    });
+    // Dosyaları sıkıştır ve FormData'ya ekle
+    const compressedFiles = await Promise.all(
+      fileObjects.map(async (fileObj) => {
+        // Update file status to uploading
+        setFiles(prev => prev.map(f => 
+          f.id === fileObj.id 
+            ? { ...f, uploadStatus: 'uploading' as const, uploadProgress: 0 }
+            : f
+        ));
+        
+        // Resim dosyalarını sıkıştır
+        const compressedFile = await compressImage(fileObj.file);
+        formData.append('files', compressedFile);
+        
+        return { ...fileObj, file: compressedFile };
+      })
+    );
     
     // Add uploader info - use parameters if provided, otherwise use state
     const finalUploaderName = uploaderNameParam || uploaderName.trim();
@@ -105,9 +157,10 @@ function App() {
     formData.append('uploaderWish', finalUploaderWish);
 
     console.log('Yükleme başlatılıyor:', {
-      fileCount: fileObjects.length,
+      fileCount: compressedFiles.length,
       uploaderName: finalUploaderName,
-      uploaderWish: finalUploaderWish
+      uploaderWish: finalUploaderWish,
+      totalSize: Array.from(formData.getAll('files')).reduce((total, file) => total + (file as File).size, 0)
     });
 
     return new Promise((resolve, reject) => {
@@ -120,9 +173,9 @@ function App() {
           setUploadProgress(percentComplete);
           
           // Update individual file progress proportionally
-          const progressPerFile = percentComplete / fileObjects.length;
+          const progressPerFile = percentComplete / compressedFiles.length;
           setFiles(prev => prev.map(f => {
-            const fileObj = fileObjects.find(fo => fo.id === f.id);
+            const fileObj = compressedFiles.find(fo => fo.id === f.id);
             if (fileObj && f.uploadStatus === 'uploading') {
               return { ...f, uploadProgress: Math.min(100, progressPerFile) };
             }
@@ -141,7 +194,7 @@ function App() {
             console.log('Upload result:', result);
 
             // Mark all files as completed
-            fileObjects.forEach(fileObj => {
+            compressedFiles.forEach(fileObj => {
               setFiles(prev => prev.map(f => 
                 f.id === fileObj.id 
                   ? { ...f, uploadStatus: 'completed' as const, uploadProgress: 100 }
@@ -158,7 +211,7 @@ function App() {
           }
         } else {
           // Mark all files as error
-          fileObjects.forEach(fileObj => {
+          compressedFiles.forEach(fileObj => {
             setFiles(prev => prev.map(f => 
               f.id === fileObj.id 
                 ? { ...f, uploadStatus: 'error' as const, uploadProgress: 0 }
@@ -174,7 +227,7 @@ function App() {
       // Handle errors
       xhr.addEventListener('error', () => {
         // Mark all files as error
-        fileObjects.forEach(fileObj => {
+        compressedFiles.forEach(fileObj => {
           setFiles(prev => prev.map(f => 
             f.id === fileObj.id 
               ? { ...f, uploadStatus: 'error' as const, uploadProgress: 0 }
@@ -189,7 +242,7 @@ function App() {
       // Handle abort
       xhr.addEventListener('abort', () => {
         // Mark all files as error
-        fileObjects.forEach(fileObj => {
+        compressedFiles.forEach(fileObj => {
           setFiles(prev => prev.map(f => 
             f.id === fileObj.id 
               ? { ...f, uploadStatus: 'error' as const, uploadProgress: 0 }
@@ -201,9 +254,13 @@ function App() {
         reject(new Error('Upload aborted'));
       });
 
-      // Open and send request
+      // Open and send request with optimizations
       const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
       xhr.open('POST', `${apiUrl}/upload`);
+      
+      // Set timeout to 5 minutes for large files
+      xhr.timeout = 300000; // 5 minutes
+      
       xhr.send(formData);
     });
   };
@@ -262,6 +319,62 @@ function App() {
     const invalidFiles = newFiles.length - validFiles.length;
     if (invalidFiles > 0) {
       alert(`${invalidFiles} dosya desteklenmeyen formatta olduğu için eklenmedi. Lütfen resim veya video dosyaları seçin.`);
+    }
+
+    // Başarılı dosya seçimi geri bildirimi
+    if (validFiles.length > 0) {
+      // iOS ve mobil cihazlar için haptic feedback (varsa)
+      if ('vibrate' in navigator) {
+        navigator.vibrate(50); // Kısa titreşim
+      }
+      
+      // Görsel geri bildirim için kısa bir başarı mesajı
+      const fileText = validFiles.length === 1 ? '1 dosya' : `${validFiles.length} dosya`;
+      const fileTypes = validFiles.map(f => f.type.startsWith('video/') ? 'video' : 'fotoğraf');
+      const uniqueTypes = [...new Set(fileTypes)];
+      const typeText = uniqueTypes.join(' ve ');
+      
+      // Toast-style bildirim göster (2 saniye sonra kaybolacak)
+      const notification = document.createElement('div');
+      notification.innerHTML = `
+        <div style="
+          position: fixed;
+          top: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: linear-gradient(135deg, #10b981, #059669);
+          color: white;
+          padding: 12px 24px;
+          border-radius: 12px;
+          box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+          z-index: 10000;
+          font-size: 14px;
+          font-weight: 600;
+          animation: slideDown 0.3s ease-out;
+        ">
+          ✅ ${fileText} başarıyla seçildi (${typeText})
+        </div>
+        <style>
+          @keyframes slideDown {
+            from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+          }
+        </style>
+      `;
+      document.body.appendChild(notification);
+      
+      // 2.5 saniye sonra bildirimi kaldır
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.style.opacity = '0';
+          notification.style.transform = 'translateX(-50%) translateY(-20px)';
+          setTimeout(() => {
+            if (notification.parentNode) {
+              document.body.removeChild(notification);
+            }
+          }, 300);
+        }
+      }, 2500);
     }
 
     const fileObjects = validFiles.map(createFileObject);
