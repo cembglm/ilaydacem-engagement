@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Upload, Heart, Camera, X, Play, Image, Video, User, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Upload, Heart, X, Play, Image, Video, User, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 interface UploadedFile {
   id: string;
@@ -20,7 +20,6 @@ function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   // Ana gönderim fonksiyonu
   const handleSubmit = async () => {
@@ -210,7 +209,7 @@ function App() {
 
     const validFiles = newFiles.filter(file => {
       if (import.meta.env.DEV) {
-        console.log('🔍 Checking file:', file.name, 'Type:', file.type);
+        console.log('🔍 Checking file:', file.name, 'Type:', file.type, 'Size:', Math.round(file.size / 1024 / 1024) + 'MB');
       }
       
       // MIME type kontrolü
@@ -231,6 +230,9 @@ function App() {
       const extensionValid = allowedExtensions.includes(fileExtension || '');
       if (import.meta.env.DEV) {
         console.log('🔍 Extension check:', fileExtension, 'Valid:', extensionValid);
+        if (file.type.startsWith('video/') || fileExtension && ['mp4', 'mov', 'avi', '3gp'].includes(fileExtension)) {
+          console.log('🎥 Video file detected:', file.name, 'MIME:', file.type);
+        }
       }
       
       return extensionValid;
@@ -286,28 +288,6 @@ function App() {
     } else {
       if (import.meta.env.DEV) {
         console.log('📱 No files selected or files is null');
-      }
-    }
-  }, [handleFiles]);
-
-  const handleGalleryInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (import.meta.env.DEV) {
-      console.log('🖼️ Gallery input triggered:', e.target.files);
-      console.log('🖼️ Number of files:', e.target.files?.length);
-    }
-    
-    if (e.target.files && e.target.files.length > 0) {
-      const selectedFiles = Array.from(e.target.files);
-      if (import.meta.env.DEV) {
-        console.log('🖼️ Gallery selected files:', selectedFiles.map(f => ({ name: f.name, type: f.type, size: f.size })));
-      }
-      handleFiles(selectedFiles);
-      
-      // Input'u sıfırla ki aynı dosya tekrar seçilebilsin
-      e.target.value = '';
-    } else {
-      if (import.meta.env.DEV) {
-        console.log('🖼️ No gallery files selected or files is null');
       }
     }
   }, [handleFiles]);
@@ -427,19 +407,19 @@ function App() {
                   onDragLeave={uploaderName.trim() ? handleDragLeave : undefined}
                   onClick={() => {
                     if (import.meta.env.DEV) {
-                      console.log('🖱️ Upload area clicked - triggering gallery');
+                      console.log('🖱️ Upload area clicked');
                       console.log('🖱️ Uploader name:', uploaderName.trim());
-                      console.log('🖱️ Gallery input ref:', galleryInputRef.current);
+                      console.log('🖱️ File input ref:', fileInputRef.current);
                     }
                     
-                    if (uploaderName.trim() && galleryInputRef.current) {
+                    if (uploaderName.trim() && fileInputRef.current) {
                       if (import.meta.env.DEV) {
-                        console.log('🖱️ Triggering gallery input click from upload area');
+                        console.log('🖱️ Triggering file input click from upload area');
                       }
-                      galleryInputRef.current.click();
+                      fileInputRef.current.click();
                     } else {
                       if (import.meta.env.DEV) {
-                        console.log('❌ Cannot trigger gallery input - missing name or ref');
+                        console.log('❌ Cannot trigger file input - missing name or ref');
                       }
                       if (!uploaderName.trim()) {
                         alert('Lütfen önce adınızı girin');
@@ -471,86 +451,47 @@ function App() {
                       uploaderName.trim() ? 'text-gray-600' : 'text-gray-400'
                     }`}>
                       {uploaderName.trim() 
-                        ? 'Galeriden dosya seçmek için buraya dokunun veya aşağıdaki butonları kullanın'
+                        ? 'Fotoğraf ve videolarınızı yüklemek için buraya dokunun'
                         : 'Dosya seçmek için önce yukarıya adınızı girin'
                       }
                     </p>
-                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (import.meta.env.DEV) {
-                            console.log('📷 Camera button clicked');
-                          }
-                          if (uploaderName.trim() && fileInputRef.current) {
-                            fileInputRef.current.click();
-                          } else if (!uploaderName.trim()) {
-                            alert('Lütfen önce adınızı girin');
-                          }
-                        }}
-                        disabled={!uploaderName.trim()}
-                        className={`inline-flex items-center gap-2 px-6 py-3 font-medium rounded-xl transition-all duration-200 ${
-                          uploaderName.trim()
-                            ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-blue-600 hover:to-purple-600 hover:scale-105'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                      >
-                        <Camera className="h-5 w-5" />
-                        Kamera
-                      </button>
-                      
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (import.meta.env.DEV) {
-                            console.log('🖼️ Gallery button clicked');
-                          }
-                          if (uploaderName.trim() && galleryInputRef.current) {
-                            galleryInputRef.current.click();
-                          } else if (!uploaderName.trim()) {
-                            alert('Lütfen önce adınızı girin');
-                          }
-                        }}
-                        disabled={!uploaderName.trim()}
-                        className={`inline-flex items-center gap-2 px-6 py-3 font-medium rounded-xl transition-all duration-200 ${
-                          uploaderName.trim()
-                            ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:from-rose-600 hover:to-pink-600 hover:scale-105'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                      >
-                        <Upload className="h-5 w-5" />
-                        Galeri
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (import.meta.env.DEV) {
+                          console.log('� File select button clicked');
+                        }
+                        if (uploaderName.trim() && fileInputRef.current) {
+                          fileInputRef.current.click();
+                        } else if (!uploaderName.trim()) {
+                          alert('Lütfen önce adınızı girin');
+                        }
+                      }}
+                      disabled={!uploaderName.trim()}
+                      className={`inline-flex items-center gap-2 px-6 py-3 font-medium rounded-xl transition-all duration-200 ${
+                        uploaderName.trim()
+                          ? 'bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:from-rose-600 hover:to-pink-600 hover:scale-105'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      <Upload className="h-5 w-5" />
+                      Dosya Seç
+                    </button>
                     <p className="text-xs text-gray-500 mt-3">
-                      📷 Kamera: Anlık fotoğraf/video çek | 🖼️ Galeri: Albümden seç (JPG, PNG, MP4, MOV, HEIC vb.) - Maks. 10GB
+                      Tüm resim ve video formatları desteklenir (Kamera çekimi, galeri seçimi, JPG, PNG, MP4, MOV, HEIC vb.) - Maks. 10GB
                     </p>
                   </div>
                 </div>
 
-                {/* Camera Input - Captures directly from camera */}
                 <input
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/*,video/*"
-                  capture="environment"
+                  accept="image/*,video/*,image/heic,image/heif,video/mp4,video/mov,video/avi,video/quicktime,video/3gp,video/3gpp,video/webm"
                   onChange={handleFileInput}
                   className="hidden"
-                  key={`camera-${Date.now()}`} 
-                />
-                
-                {/* Gallery Input - Selects from photo library */}
-                <input
-                  ref={galleryInputRef}
-                  type="file"
-                  multiple
-                  accept="image/*,video/*"
-                  onChange={handleGalleryInput}
-                  className="hidden"
-                  key={`gallery-${Date.now()}`} 
+                  key={`file-${Date.now()}`} 
                 />
               </div>
 
