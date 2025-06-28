@@ -4,7 +4,7 @@
   "description": "Backend for Ilayda & Cem engagement photo uploader",
   "main": "index.js",
   "type": "module",  "scripts": {
-    "start": "NODE_ENV=production node index.js",
+    "start": "node index.js",
     "dev": "nodemon index.js"
   },
   "dependencies": {

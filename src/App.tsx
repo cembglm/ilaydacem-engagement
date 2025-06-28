@@ -110,43 +110,69 @@ function App() {
       uploaderWish: finalUploaderWish
     });
 
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001')}/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      // Simulate progress for better user experience
-      if (fileObjects.length > 0) {
-        const progressInterval = setInterval(() => {
-          setUploadProgress(prev => {
-            const newProgress = prev + (100 / (fileObjects.length * 10));
-            if (newProgress >= 90) {
-              clearInterval(progressInterval);
-              return 90;
-            }
-            return newProgress;
-          });
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      
+      // Upload progress event
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = (event.loaded / event.total) * 100;
+          setUploadProgress(percentComplete);
           
-          // Update individual file progress
+          // Update individual file progress proportionally
+          const progressPerFile = percentComplete / fileObjects.length;
           setFiles(prev => prev.map(f => {
             const fileObj = fileObjects.find(fo => fo.id === f.id);
             if (fileObj && f.uploadStatus === 'uploading') {
-              const fileProgress = Math.min(100, (f.uploadProgress || 0) + Math.random() * 15);
-              return { ...f, uploadProgress: fileProgress };
+              return { ...f, uploadProgress: Math.min(100, progressPerFile) };
             }
             return f;
           }));
-        }, 200);
+          
+          console.log('Upload progress:', Math.round(percentComplete) + '%');
+        }
+      });
 
-        // Clear interval when response is received
-        setTimeout(() => clearInterval(progressInterval), 1000);
-      }
+      // Handle completion
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const result = JSON.parse(xhr.responseText);
+            console.log('Upload result:', result);
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+            // Mark all files as completed
+            fileObjects.forEach(fileObj => {
+              setFiles(prev => prev.map(f => 
+                f.id === fileObj.id 
+                  ? { ...f, uploadStatus: 'completed' as const, uploadProgress: 100 }
+                  : f
+              ));
+            });
 
-      if (!response.ok) {
+            // Complete overall progress
+            setUploadProgress(100);
+            resolve(result);
+          } catch (error) {
+            console.error('Error parsing response:', error);
+            reject(new Error('Invalid response format'));
+          }
+        } else {
+          // Mark all files as error
+          fileObjects.forEach(fileObj => {
+            setFiles(prev => prev.map(f => 
+              f.id === fileObj.id 
+                ? { ...f, uploadStatus: 'error' as const, uploadProgress: 0 }
+                : f
+            ));
+          });
+          
+          console.error('Upload failed with status:', xhr.status);
+          reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
+        }
+      });
+
+      // Handle errors
+      xhr.addEventListener('error', () => {
         // Mark all files as error
         fileObjects.forEach(fileObj => {
           setFiles(prev => prev.map(f => 
@@ -156,40 +182,30 @@ function App() {
           ));
         });
         
-        const errorText = await response.text();
-        console.error('Response error text:', errorText);
-        throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('Upload result:', result);
-
-      // Mark all files as completed
-      fileObjects.forEach(fileObj => {
-        setFiles(prev => prev.map(f => 
-          f.id === fileObj.id 
-            ? { ...f, uploadStatus: 'completed' as const, uploadProgress: 100 }
-            : f
-        ));
+        console.error('Upload error');
+        reject(new Error('Upload failed'));
       });
 
-      // Complete overall progress
-      setUploadProgress(100);
-
-      return result;
-    } catch (error) {
-      // Mark all files as error
-      fileObjects.forEach(fileObj => {
-        setFiles(prev => prev.map(f => 
-          f.id === fileObj.id 
-            ? { ...f, uploadStatus: 'error' as const, uploadProgress: 0 }
-            : f
-        ));
+      // Handle abort
+      xhr.addEventListener('abort', () => {
+        // Mark all files as error
+        fileObjects.forEach(fileObj => {
+          setFiles(prev => prev.map(f => 
+            f.id === fileObj.id 
+              ? { ...f, uploadStatus: 'error' as const, uploadProgress: 0 }
+              : f
+          ));
+        });
+        
+        console.error('Upload aborted');
+        reject(new Error('Upload aborted'));
       });
-      
-      console.error('Upload error:', error);
-      throw error;
-    }
+
+      // Open and send request
+      const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
+      xhr.open('POST', `${apiUrl}/upload`);
+      xhr.send(formData);
+    });
   };
 
   const handleFiles = useCallback(async (newFiles: File[]) => {
@@ -460,7 +476,7 @@ function App() {
                       onClick={(e) => {
                         e.stopPropagation();
                         if (import.meta.env.DEV) {
-                          console.log('� File select button clicked');
+                          console.log('📸 File select button clicked');
                         }
                         if (uploaderName.trim() && fileInputRef.current) {
                           fileInputRef.current.click();
@@ -476,7 +492,7 @@ function App() {
                       }`}
                     >
                       <Upload className="h-5 w-5" />
-                      Dosya Seç
+                      Dosya Seç / Kamera
                     </button>
                     <p className="text-xs text-gray-500 mt-3">
                       Tüm resim ve video formatları desteklenir (Kamera çekimi, galeri seçimi, JPG, PNG, MP4, MOV, HEIC vb.) - Maks. 10GB
@@ -488,11 +504,46 @@ function App() {
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept="image/*,video/*,image/heic,image/heif,video/mp4,video/mov,video/avi,video/quicktime,video/3gp,video/3gpp,video/webm"
+                  accept="image/*,video/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff,.tif,.svg,.heic,.heif,.mp4,.mov,.avi,.wmv,.flv,.webm,.mkv,.m4v,.3gp,.3gpp"
                   onChange={handleFileInput}
                   className="hidden"
                   key={`file-${Date.now()}`} 
                 />
+                
+                {/* Debug: Visible file input for testing */}
+                {import.meta.env.DEV && (
+                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+                    <h4 className="text-sm font-medium text-yellow-800 mb-2">
+                      🔧 Debug: Dosya Seçimi Testi (Sadece Development)
+                    </h4>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs text-yellow-700">Resim/Video (capture):</label>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*,video/*"
+                          capture="environment"
+                          onChange={handleFileInput}
+                          className="block w-full text-sm text-gray-700"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-yellow-700">Tüm dosyalar:</label>
+                        <input
+                          type="file"
+                          multiple
+                          accept="*/*"
+                          onChange={handleFileInput}
+                          className="block w-full text-sm text-gray-700"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Eğer üstteki alan çalışmıyorsa, bu alanları kullanın
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* File Previews */}
