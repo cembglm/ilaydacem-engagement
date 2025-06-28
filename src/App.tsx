@@ -193,7 +193,9 @@ function App() {
   };
 
   const handleFiles = useCallback(async (newFiles: File[]) => {
-    console.log('📂 handleFiles called with:', newFiles.length, 'files');
+    if (import.meta.env.DEV) {
+      console.log('📂 handleFiles called with:', newFiles.length, 'files');
+    }
     
     const allowedTypes = [
       // Resim formatları
@@ -206,11 +208,15 @@ function App() {
     ];
 
     const validFiles = newFiles.filter(file => {
-      console.log('🔍 Checking file:', file.name, 'Type:', file.type);
+      if (import.meta.env.DEV) {
+        console.log('🔍 Checking file:', file.name, 'Type:', file.type);
+      }
       
       // MIME type kontrolü
       if (allowedTypes.includes(file.type)) {
-        console.log('✅ File accepted by MIME type:', file.type);
+        if (import.meta.env.DEV) {
+          console.log('✅ File accepted by MIME type:', file.type);
+        }
         return true;
       }
       
@@ -222,12 +228,16 @@ function App() {
       ];
       
       const extensionValid = allowedExtensions.includes(fileExtension || '');
-      console.log('🔍 Extension check:', fileExtension, 'Valid:', extensionValid);
+      if (import.meta.env.DEV) {
+        console.log('🔍 Extension check:', fileExtension, 'Valid:', extensionValid);
+      }
       
       return extensionValid;
     });
 
-    console.log('✅ Valid files:', validFiles.length, 'out of', newFiles.length);
+    if (import.meta.env.DEV) {
+      console.log('✅ Valid files:', validFiles.length, 'out of', newFiles.length);
+    }
 
     // Geçersiz dosyalar hakkında kullanıcıyı bilgilendir
     const invalidFiles = newFiles.length - validFiles.length;
@@ -236,11 +246,15 @@ function App() {
     }
 
     const fileObjects = validFiles.map(createFileObject);
-    console.log('📦 Created file objects:', fileObjects.length);
+    if (import.meta.env.DEV) {
+      console.log('📦 Created file objects:', fileObjects.length);
+    }
     
     setFiles(prev => {
       const newFileList = [...prev, ...fileObjects];
-      console.log('📝 Updated file list length:', newFileList.length);
+      if (import.meta.env.DEV) {
+        console.log('📝 Updated file list length:', newFileList.length);
+      }
       return newFileList;
     });
   }, [createFileObject]);
@@ -254,18 +268,24 @@ function App() {
   }, [handleFiles]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('📱 File input triggered:', e.target.files);
-    console.log('📱 Number of files:', e.target.files?.length);
+    if (import.meta.env.DEV) {
+      console.log('📱 File input triggered:', e.target.files);
+      console.log('📱 Number of files:', e.target.files?.length);
+    }
     
     if (e.target.files && e.target.files.length > 0) {
       const selectedFiles = Array.from(e.target.files);
-      console.log('📱 Selected files:', selectedFiles.map(f => ({ name: f.name, type: f.type, size: f.size })));
+      if (import.meta.env.DEV) {
+        console.log('📱 Selected files:', selectedFiles.map(f => ({ name: f.name, type: f.type, size: f.size })));
+      }
       handleFiles(selectedFiles);
       
       // Input'u sıfırla ki aynı dosya tekrar seçilebilsin
       e.target.value = '';
     } else {
-      console.log('📱 No files selected or files is null');
+      if (import.meta.env.DEV) {
+        console.log('📱 No files selected or files is null');
+      }
     }
   }, [handleFiles]);
 
@@ -383,22 +403,30 @@ function App() {
                   onDragOver={uploaderName.trim() ? handleDragOver : undefined}
                   onDragLeave={uploaderName.trim() ? handleDragLeave : undefined}
                   onClick={() => {
-                    console.log('🖱️ Upload area clicked');
-                    console.log('🖱️ Uploader name:', uploaderName.trim());
-                    console.log('🖱️ File input ref:', fileInputRef.current);
+                    if (import.meta.env.DEV) {
+                      console.log('🖱️ Upload area clicked');
+                      console.log('🖱️ Uploader name:', uploaderName.trim());
+                      console.log('🖱️ File input ref:', fileInputRef.current);
+                    }
                     
                     if (uploaderName.trim() && fileInputRef.current) {
-                      console.log('🖱️ Triggering file input click from upload area');
+                      if (import.meta.env.DEV) {
+                        console.log('🖱️ Triggering file input click from upload area');
+                      }
                       fileInputRef.current.click();
                     } else {
-                      console.log('❌ Cannot trigger file input - missing name or ref');
+                      if (import.meta.env.DEV) {
+                        console.log('❌ Cannot trigger file input - missing name or ref');
+                      }
                       if (!uploaderName.trim()) {
                         alert('Lütfen önce adınızı girin');
                       }
                     }
                   }}
                   onTouchStart={() => {
-                    console.log('📱 Touch start on upload area');
+                    if (import.meta.env.DEV) {
+                      console.log('📱 Touch start on upload area');
+                    }
                   }}
                 >
                   <div className="p-8 text-center">
